@@ -6,7 +6,7 @@ from discord.ext import commands
 
 from app.core.settings import SETTINGS
 from app.types import Interaction  # ruff: ignore[typing-only-first-party-import]
-from app.ui import Label, Modal, Select
+from app.ui import Label, Modal, Select, TextInput
 
 if TYPE_CHECKING:
     from app.core.bot import MyBot
@@ -16,11 +16,11 @@ async def create_post(
     i: Interaction,
     forum: discord.ForumChannel,
     message: discord.Message,
+    name: str,
     tags: list[discord.ForumTag],
 ) -> None:
     await i.response.defer(ephemeral=True)
 
-    name = message.content.split("\n", 1)[0][:100] or f"Message from {message.author.display_name}"
     suffix = f"\n\n-# Original message: {message.jump_url}"
     content = message.content[: 2000 - len(suffix)] + suffix
     files = [await a.to_file() for a in message.attachments]
@@ -31,29 +31,40 @@ async def create_post(
     await i.followup.send(f"Created post: {thread.jump_url}", ephemeral=True)
 
 
-class TagModal(Modal):
+class PostModal(Modal):
     def __init__(self, forum: discord.ForumChannel, message: discord.Message) -> None:
         super().__init__(title="Convert to Forum Post")
         self.forum = forum
         self.message = message
-        self.tags: Label[Select] = Label(
-            text="Tags",
-            component=Select(
-                options=[
-                    discord.SelectOption(label=t.name, value=str(t.id), emoji=t.emoji)
-                    for t in forum.available_tags
-                ],
-                min_values=1 if forum.flags.require_tag else 0,
-                max_values=min(5, len(forum.available_tags)),
-                required=forum.flags.require_tag,
-            ),
+
+        default_name = (
+            message.content.split("\n", 1)[0][:100] or f"Message from {message.author.display_name}"
         )
-        self.add_item(self.tags)
+        self.name: Label[TextInput] = Label(
+            text="Title", component=TextInput(default=default_name, max_length=100)
+        )
+        self.add_item(self.name)
+
+        self.tags: Label[Select] | None = None
+        if forum.available_tags:
+            self.tags = Label(
+                text="Tags",
+                component=Select(
+                    options=[
+                        discord.SelectOption(label=t.name, value=str(t.id), emoji=t.emoji)
+                        for t in forum.available_tags
+                    ],
+                    min_values=1 if forum.flags.require_tag else 0,
+                    max_values=min(5, len(forum.available_tags)),
+                    required=forum.flags.require_tag,
+                ),
+            )
+            self.add_item(self.tags)
 
     async def on_submit(self, i: Interaction) -> None:
-        selected = self.tags.component.values
+        selected = self.tags.component.values if self.tags else []
         tags = [t for t in self.forum.available_tags if str(t.id) in selected]
-        await create_post(i, self.forum, self.message, tags)
+        await create_post(i, self.forum, self.message, self.name.component.value, tags)
 
 
 class Forum(commands.Cog):
@@ -75,10 +86,7 @@ class Forum(commands.Cog):
             msg = f"Channel {SETTINGS.forum_channel_id} is not a forum channel"
             raise TypeError(msg)
 
-        if forum.available_tags:
-            await i.response.send_modal(TagModal(forum, message))
-        else:
-            await create_post(i, forum, message, [])
+        await i.response.send_modal(PostModal(forum, message))
 
 
 async def setup(bot: MyBot) -> None:
