@@ -13,8 +13,8 @@ async def handle_error(i: Interaction, error: Exception) -> None:
     e = original or error
     logger.exception("Error occurred", exc_info=e)
     embed = ErrorEmbed(
-        title="發生錯誤了",
-        description="發生了一些預期之外的錯誤, 請稍後再試一次\n如果問題持續存在, 請聯繫開發者",
+        title="Something went wrong",
+        description="An unexpected error occurred, please try again later.\nIf the problem persists, please contact the developer.",
     )
 
     if i.response.is_done():
