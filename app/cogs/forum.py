@@ -21,12 +21,16 @@ async def create_post(
 ) -> None:
     await i.response.defer(ephemeral=True)
 
-    suffix = f"\n\n-# Original message: {message.jump_url}"
+    suffix = f"\n\n-# Original message: {message.jump_url}\n-# Added by {i.user.mention}"
     content = message.content[: 2000 - len(suffix)] + suffix
     files = [await a.to_file() for a in message.attachments]
 
     thread, _ = await forum.create_thread(
-        name=name, content=content, files=files, applied_tags=tags
+        name=name,
+        content=content,
+        files=files,
+        applied_tags=tags,
+        allowed_mentions=discord.AllowedMentions.none(),
     )
     await i.followup.send(f"Created post: {thread.jump_url}", ephemeral=True)
 
