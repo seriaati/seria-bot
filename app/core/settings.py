@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     discord_token: str
     env: Literal["dev", "prod"]
+    forum_channel_id: int
 
     @property
     def is_dev(self) -> bool:
