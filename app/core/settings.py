@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     discord_token: str
     env: Literal["dev", "prod"]
     forum_channel_id: int
+    guild_id: int
+    sponsor_role_id: int
+    seria_api_key: str
 
     @property
     def is_dev(self) -> bool:

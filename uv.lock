@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.14"
 
 [[package]]
@@ -112,6 +112,7 @@ name = "app-bot"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "aiohttp" },
     { name = "anyio" },
     { name = "discord-py", extra = ["speed"] },
     { name = "jishaku" },
@@ -122,6 +123,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiohttp", specifier = ">=3.13.3" },
     { name = "anyio", specifier = ">=4.12.1" },
     { name = "discord-py", extras = ["speed"], specifier = ">=2.7.1" },
     { name = "jishaku", specifier = ">=2.6.3" },
