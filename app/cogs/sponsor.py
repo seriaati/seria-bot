@@ -21,10 +21,13 @@ CLAIM_COOLDOWN = datetime.timedelta(minutes=10)
 EXTRA_SPONSORS_URL = "https://api.seria.moe/sponsors/extra"
 
 
-def get_owner(bot: MyBot) -> discord.User:
+async def get_owner(bot: MyBot) -> discord.User:
     # Fetched by discord.py during login, so it's always set once interactions arrive
-    assert bot.application is not None
-    return bot.application.owner
+    app = bot.application
+    assert app is not None
+    # For team-owned apps, app.owner is a "team<id>" pseudo-user that can't receive DMs
+    owner_id = app.team.owner_id if app.team and app.team.owner_id else app.owner.id
+    return await bot.fetch_user(owner_id)
 
 
 async def add_extra_sponsor(user_id: int) -> None:
@@ -90,7 +93,7 @@ class ApproveButton(ui.DynamicItem[Button], template=r"claim:approve:(?P<user_id
             )
             status = "✅ Approved (role granted)"
 
-        owner = get_owner(i.client)
+        owner = await get_owner(i.client)
         message = (
             "Your sponsor claim has been approved! "
             "Your sponsor perks should show up automatically within 1 hour. "
@@ -184,7 +187,8 @@ class ClaimModal(Modal):
 
         view = View(timeout=None)
         view.add_item(ApproveButton(i.user.id)).add_item(DenyButton(i.user.id))
-        await get_owner(i.client).send(content, files=files, view=view)
+        owner = await get_owner(i.client)
+        await owner.send(content, files=files, view=view)
 
         self.next_claim_at[i.user.id] = discord.utils.utcnow() + CLAIM_COOLDOWN
         await i.followup.send(
