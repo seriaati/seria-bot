@@ -6,6 +6,7 @@ import discord
 from discord import app_commands, ui
 from discord.ext import commands
 
+from app.core.embeds import DefaultEmbed, ErrorEmbed
 from app.core.error_handler import handle_error
 from app.core.settings import SETTINGS
 from app.types import Interaction  # ruff: ignore[typing-only-first-party-import]
@@ -40,15 +41,19 @@ async def add_extra_sponsor(user_id: int) -> None:
         resp.raise_for_status()
 
 
-async def resolve_claim(i: Interaction, user_id: int, user_message: str, status: str) -> None:
+async def resolve_claim(
+    i: Interaction, user_id: int, user_embed: discord.Embed, status: str
+) -> None:
     user = await i.client.fetch_user(user_id)
     try:
-        await user.send(user_message)
+        await user.send(embed=user_embed)
     except discord.Forbidden:
-        status += " (couldn't DM the user)"
+        status += "\nCouldn't DM the user"
 
     assert i.message is not None
-    await i.edit_original_response(content=f"{i.message.content}\n\n{status}", view=None)
+    embed = i.message.embeds[0]
+    embed.add_field(name="Status", value=status, inline=False)
+    await i.edit_original_response(embed=embed, view=None)
 
 
 class ApproveButton(ui.DynamicItem[Button], template=r"claim:approve:(?P<user_id>\d+)"):
@@ -92,12 +97,14 @@ class ApproveButton(ui.DynamicItem[Button], template=r"claim:approve:(?P<user_id
             status = "✅ Approved (role granted)"
 
         owner = await get_owner(i.client)
-        message = (
-            "Your sponsor claim has been approved! "
-            "Your sponsor perks should show up automatically within 1 hour. "
-            f"If they don't, please contact [@{owner.name}](https://discord.com/users/{owner.id}) on Discord."
+        embed = DefaultEmbed(
+            title="Sponsor Claim Approved",
+            description=(
+                "Your sponsor perks should show up automatically within 1 hour.\n"
+                f"If they don't, please contact [@{owner.name}](https://discord.com/users/{owner.id}) on Discord."
+            ),
         )
-        await resolve_claim(i, self.user_id, message, status)
+        await resolve_claim(i, self.user_id, embed, status)
 
 
 class DenyModal(Modal):
@@ -113,12 +120,12 @@ class DenyModal(Modal):
     async def on_submit(self, i: Interaction) -> None:
         await i.response.defer()
 
-        message = "Your sponsor claim has been denied."
+        embed = ErrorEmbed(title="Sponsor Claim Denied")
         status = "❌ Denied"
         if reason := self.reason.component.value:
-            message += f"\n**Reason:** {reason}"
-            status += f": {reason}"
-        await resolve_claim(i, self.user_id, message, status)
+            embed.add_field(name="Reason", value=reason, inline=False)
+            status += f"\n**Reason:** {reason}"
+        await resolve_claim(i, self.user_id, embed, status)
 
 
 class DenyButton(ui.DynamicItem[Button], template=r"claim:deny:(?P<user_id>\d+)"):
@@ -164,11 +171,12 @@ class ClaimModal(Modal):
             a.filename for a in attachments if not (a.content_type or "").startswith("image/")
         ]
         if non_images:
-            names = ", ".join(f"`{name}`" for name in non_images)
-            await i.response.send_message(
-                f"Only images are allowed. Please run `/claim` again without: {names}",
-                ephemeral=True,
+            names = "\n".join(f"- `{name}`" for name in non_images)
+            embed = ErrorEmbed(
+                title="Only Images Are Allowed",
+                description=f"Please run `/claim` again without these files:\n{names}",
             )
+            await i.response.send_message(embed=embed, ephemeral=True)
             return
 
         await i.response.defer(ephemeral=True, thinking=True)
@@ -178,20 +186,26 @@ class ClaimModal(Modal):
             await a.to_file(filename=f"screenshot_{n}{PurePath(a.filename).suffix}")
             for n, a in enumerate(attachments, 1)
         ]
-        content = f"**New sponsor claim** from {i.user.mention} (`{i.user.name}`, `{i.user.id}`)"
+        claim_embed = DefaultEmbed(
+            title="New Sponsor Claim",
+            description=(
+                f"**User:** {i.user.mention}\n**Username:** `{i.user.name}`\n**ID:** `{i.user.id}`"
+            ),
+        )
+        claim_embed.set_thumbnail(url=i.user.display_avatar.url)
         if notes := self.notes.component.value:
-            content += f"\n**Notes:**\n{notes}"
+            claim_embed.add_field(name="Notes", value=notes, inline=False)
 
         view = View(timeout=None)
         view.add_item(ApproveButton(i.user.id)).add_item(DenyButton(i.user.id))
         owner = await get_owner(i.client)
-        await owner.send(content, files=files, view=view)
+        await owner.send(embed=claim_embed, files=files, view=view)
 
-        await i.followup.send(
-            "Your claim has been submitted! Please wait for approval, "
-            "you'll receive a DM with the result.",
-            ephemeral=True,
+        embed = DefaultEmbed(
+            title="Claim Submitted",
+            description="Please wait for approval.\nYou'll receive a DM with the result.",
         )
+        await i.followup.send(embed=embed, ephemeral=True)
 
 
 class Sponsor(commands.Cog):
