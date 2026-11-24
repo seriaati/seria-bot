@@ -1,4 +1,3 @@
-import datetime
 from pathlib import PurePath
 from typing import TYPE_CHECKING, Any, Self
 
@@ -17,7 +16,6 @@ if TYPE_CHECKING:
 
     from app.core.bot import MyBot
 
-CLAIM_COOLDOWN = datetime.timedelta(minutes=10)
 EXTRA_SPONSORS_URL = "https://api.seria.moe/sponsors/extra"
 
 
@@ -143,9 +141,8 @@ class DenyButton(ui.DynamicItem[Button], template=r"claim:deny:(?P<user_id>\d+)"
 
 
 class ClaimModal(Modal):
-    def __init__(self, next_claim_at: dict[int, datetime.datetime]) -> None:
+    def __init__(self) -> None:
         super().__init__(title="Claim Sponsor Perks")
-        self.next_claim_at = next_claim_at
 
         self.screenshots: Label[FileUpload] = Label(
             text="Screenshots",
@@ -190,7 +187,6 @@ class ClaimModal(Modal):
         owner = await get_owner(i.client)
         await owner.send(content, files=files, view=view)
 
-        self.next_claim_at[i.user.id] = discord.utils.utcnow() + CLAIM_COOLDOWN
         await i.followup.send(
             "Your claim has been submitted! Please wait for approval, "
             "you'll receive a DM with the result.",
@@ -201,7 +197,6 @@ class ClaimModal(Modal):
 class Sponsor(commands.Cog):
     def __init__(self, bot: MyBot) -> None:
         self.bot = bot
-        self.next_claim_at: dict[int, datetime.datetime] = {}
 
     async def cog_load(self) -> None:
         self.bot.add_dynamic_items(ApproveButton, DenyButton)
@@ -212,17 +207,9 @@ class Sponsor(commands.Cog):
     @app_commands.command(name="claim", description="Claim your sponsor perks")
     @app_commands.allowed_installs(guilds=True, users=True)
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    @app_commands.checks.cooldown(1, 10 * 60)
     async def claim(self, i: Interaction) -> None:
-        ready_at = self.next_claim_at.get(i.user.id)
-        if ready_at is not None and ready_at > discord.utils.utcnow():
-            await i.response.send_message(
-                "You've already submitted a claim recently. "
-                f"Please try again {discord.utils.format_dt(ready_at, 'R')}.",
-                ephemeral=True,
-            )
-            return
-
-        await i.response.send_modal(ClaimModal(self.next_claim_at))
+        await i.response.send_modal(ClaimModal())
 
 
 async def setup(bot: MyBot) -> None:
